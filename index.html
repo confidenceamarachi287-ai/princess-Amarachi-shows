@@ -1,0 +1,399 @@
+html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Pro Match - Club & Player Selection</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050811;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            user-select: none;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+        }
+        /* Setup / Menu Overlay screen */
+        #menu-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 15, 30, 0.95);
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        .menu-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid #00ffcc;
+            border-radius: 15px;
+            padding: 30px;
+            width: 80%;
+            max-width: 600px;
+            text-align: center;
+            box-shadow: 0 0 30px rgba(0, 255, 204, 0.2);
+        }
+        select, .btn {
+            background: #00ffcc;
+            color: #000;
+            border: none;
+            padding: 12px 25px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            margin: 10px;
+            transition: 0.2s;
+        }
+        select {
+            background: #1f2833;
+            color: #fff;
+            border: 1px solid #00ffcc;
+            width: 80%;
+        }
+        .btn:hover {
+            transform: scale(1.05);
+            background: #fff;
+            box-shadow: 0 0 20px #fff;
+        }
+        /* In-Game HUD overlay */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 5;
+        }
+        .hud {
+            pointer-events: auto;
+            background: rgba(0, 0, 0, 0.85);
+            border: 2px solid #00ffcc;
+            border-radius: 10px;
+            padding: 15px 25px;
+            color: #fff;
+            box-shadow: 0 0 15px rgba(0, 255, 204, 0.3);
+        }
+        #scoreboard {
+            align-self: center;
+            display: flex;
+            gap: 40px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            align-items: center;
+        }
+        .team-score {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .team-name { color: #00ffcc; font-size: 1.1rem; text-transform: uppercase; margin-bottom: 5px;}
+        #controls-panel {
+            align-self: center;
+            margin-bottom: 20px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+        #match-ticker {
+            font-size: 1.2rem;
+            color: #fff;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+        .hidden { display: none !important; }
+    </style>
+    <script src="https://cloudflare.com"></script>
+</head>
+<body>
+
+    <!-- Selection Menu System -->
+    <div id="menu-overlay">
+        <div class="menu-card">
+            <h2>🏆 FOOTBALL PRO 3D SETUP</h2>
+            <p>Select your Club and your opponent's Club:</p>
+            
+            <label for="home-team-select">Your Team (Home):</label><br>
+            <select id="home-team-select" onchange="updatePlayerDropdowns()">
+                <option value="Real Madrid">👑 Real Madrid</option>
+                <option value="Manchester City">🦈 Manchester City</option>
+                <option value="FC Barcelona"> Blaugrana Barcelona</option>
+                <option value="Liverpool FC">🔴 Liverpool FC</option>
+                <option value="Bayern Munich">🔴 Bayern Munich</option>
+            </select>
+            <br><br>
+            <label for="away-team-select">Opponent Team (Away):</label><br>
+            <select id="away-team-select">
+                <option value="Manchester City" selected>🦈 Manchester City</option>
+                <option value="Real Madrid">👑 Real Madrid</option>
+                <option value="FC Barcelona"> Blaugrana Barcelona</option>
+                <option value="Liverpool FC">🔴 Liverpool FC</option>
+                <option value="Bayern Munich">🔴 Bayern Munich</option>
+            </select>
+            <br><br>
+            <button class="btn" onclick="startMatchEngine()">KICK OFF MATCH ⚽</button>
+        </div>
+    </div>
+
+    <!-- 3D Graphics Canvas Area Target Hook -->
+    <div id="canvas-container"></div>
+
+    <!-- Active Gameplay HUD UI Layer -->
+    <div id="ui-layer" class="hidden">
+        <div class="hud" id="scoreboard">
+            <div class="team-score">
+                <span class="team-name" id="hud-home-name">Home</span>
+                <span id="score-home">0</span>
+                <span style="font-size: 0.85rem; color: #ff0077;" id="hud-home-player">Striker: --</span>
+            </div>
+            <div style="color: #ff3366;">VS</div>
+            <div class="team-score">
+                <span class="team-name" id="hud-away-name">Away</span>
+                <span id="score-away">0</span>
+                <span style="font-size: 0.85rem; color: #aaa;" id="hud-away-player">Keeper: --</span>
+            </div>
+        </div>
+
+        <div id="controls-panel">
+            <button class="btn" id="kick-btn" onclick="shootBall()">⚡ KICK SHOT</button>
+            
+            <!-- Real-Time In-Game Substitution Controls -->
+            <div class="hud" style="padding: 10px; display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 0.85rem; font-weight: bold; color: #00ffcc;">🔄 SUB STRIKER:</span>
+                <select id="sub-striker-select" style="width: auto; padding: 5px; font-size: 0.9rem;" onchange="executeSubstitution()">
+                    <!-- Populated dynamically via JS arrays -->
+                </select>
+            </div>
+            <div id="match-ticker">Step up and take the penalty shot!</div>
+        </div>
+    </div>
+
+    <script>
+        // --- DATA MATRIX DEFINITIONS FOR ROSTERS ---
+        const teamDatabase = {
+            "Real Madrid": {
+                strikers: ["Kylian Mbappé", "Vinícius Júnior", "Jude Bellingham", "Rodrygo Goes"],
+                keeper: "Thibaut Courtois"
+            },
+            "Manchester City": {
+                strikers: ["Erling Haaland", "Phil Foden", "Kevin De Bruyne", "Jack Grealish"],
+                keeper: "Ederson"
+            },
+            "FC Barcelona": {
+                strikers: ["Robert Lewandowski", "Lamine Yamal", "Raphinha", "Dani Olmo"],
+                keeper: "Marc-André ter Stegen"
+            },
+            "Liverpool FC": {
+                strikers: ["Mohamed Salah", "Luis Díaz", "Darwin Núñez", "Cody Gakpo"],
+                keeper: "Alisson Becker"
+            },
+            "Bayern Munich": {
+                strikers: ["Harry Kane", "Jamal Musiala", "Leroy Sané", "Michael Olise"],
+                keeper: "Manuel Neuer"
+            }
+        };
+
+        let scene, camera, renderer, ball, ground;
+        let homeTeam, awayTeam, activeStriker;
+        let scoreHome = 0, scoreAway = 0;
+        let isHomeTurn = true;
+        let ballPhysics = { active: false, velocity: new THREE.Vector3(), gravity: -9.8 };
+
+        function updatePlayerDropdowns() {
+            const selectedHome = document.getElementById("home-team-select").value;
+            const subSelect = document.getElementById("sub-striker-select");
+            subSelect.innerHTML = "";
+            
+            // Build the tactical roster pool interface elements
+            teamDatabase[selectedHome].strikers.forEach(player => {
+                let opt = document.createElement("option");
+                opt.value = player;
+                opt.innerText = player;
+                subSelect.appendChild(opt);
+            });
+        }
+
+        // Initialize lists immediately on loading the document window layout bounds
+        updatePlayerDropdowns();
+
+        function startMatchEngine() {
+            homeTeam = document.getElementById("home-team-select").value;
+            awayTeam = document.getElementById("away-team-select").value;
+
+            if(homeTeam === awayTeam) {
+                alert("Please select two different clubs for a competitive match format!");
+                return;
+            }
+
+            // Lock values and assign current tactical sheets parameters
+            activeStriker = teamDatabase[homeTeam].strikers[0];
+
+            document.getElementById("menu-overlay").classList.add("hidden");
+            document.getElementById("ui-layer").classList.remove("hidden");
+
+            // Setup display parameters tracking layers data fields elements text
+            document.getElementById("hud-home-name").innerText = homeTeam;
+            document.getElementById("hud-away-name").innerText = awayTeam;
+            
+            resetTurnHUDLabels();
+            init3DWorld();
+        }
+
+        function executeSubstitution() {
+            if (ballPhysics.active) return;
+            if (!isHomeTurn) {
+                alert("You can only make substitutions when your team is taking the shot!");
+                return;
+            }
+            const selectedPlayer = document.getElementById("sub-striker-select").value;
+Use code with caution.
+activeStriker = selectedPlayer;
+document.getElementById("hud-home-player").innerText = Striker: ${activeStriker} (SUB);
+document.getElementById("match-ticker").innerText = Substitution complete. ${activeStriker} is now on the field!;
+}
+function init3DWorld() {
+const container = document.getElementById('canvas-container');
+scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a1128);
+scene.fog = new THREE.FogExp2(0x0a1128, 0.02);
+camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 3, 11);
+camera.lookAt(0, 1.5, -20);
+renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+container.appendChild(renderer.domElement);
+// Grass Turf Texture mapping simulation shapes
+const groundGeo = new THREE.PlaneGeometry(80, 80);
+const groundMat = new THREE.MeshStandardMaterial({ color: 0x145a32, roughness: 0.9 });
+ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+// Lines and Boundaries markup lines elements arrays
+const linesGeo = new THREE.PlaneGeometry(22, 14);
+const linesMat = new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true });
+const penaltyBox = new THREE.Mesh(linesGeo, linesMat);
+penaltyBox.rotation.x = -Math.PI / 2;
+penaltyBox.position.set(0, 0.02, -13);
+scene.add(penaltyBox);
+// White Goal System Setup parameters configuration limits
+const postMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+const pLeft = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 4.5), postMat);
+pLeft.position.set(-4.5, 2.25, -20);
+const pRight = pLeft.clone(); pRight.position.x = 4.5;
+const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 9), postMat);
+bar.rotation.z = Math.PI / 2; bar.position.set(0, 4.5, -20);
+scene.add(pLeft, pRight, bar);
+// Match Ball Construction Layout configuration target elements profiles mesh
+const ballGeo = new THREE.SphereGeometry(0.32, 32, 32);
+const ballMat = new THREE.MeshStandardMaterial({ color: 0xfdfefe, roughness: 0.4 });
+ball = new THREE.Mesh(ballGeo, ballMat);
+ball.position.set(0, 0.32, 5);
+ball.castShadow = true;
+scene.add(ball);
+// Lightning Environment Engine configurations profiles tracking data elements keys
+scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+const spot = new THREE.DirectionalLight(0xffffff, 1.2);
+spot.position.set(5, 15, 8);
+spot.castShadow = true;
+scene.add(spot);
+window.addEventListener('resize', () => {
+camera.aspect = window.innerWidth / window.innerHeight;
+camera.updateProjectionMatrix();
+renderer.setSize(window.innerWidth, window.innerHeight);
+}, false);
+animateFrameLoop();
+}
+function animateFrameLoop() {
+requestAnimationFrame(animateFrameLoop);
+if (ballPhysics.active) {
+ball.position.add(ballPhysics.velocity);
+ballPhysics.velocity.y += ballPhysics.gravity * 0.016;
+ball.rotation.x += 0.12;
+if (ball.position.z <= -20) {
+ballPhysics.active = false;
+evaluateMatchScoreState();
+}
+}
+renderer.render(scene, camera);
+}
+function shootBall() {
+if (ballPhysics.active) return;
+document.getElementById('kick-btn').style.display = 'none';
+const targetX = (Math.random() - 0.5) * 12;
+const targetY = Math.random() * 5.5;
+const steps = 40;
+ballPhysics.velocity.set(
+(targetX - ball.position.x) / steps,
+(targetY - ball.position.y) / steps,
+(-20 - ball.position.z) / steps
+);
+ballPhysics.active = true;
+document.getElementById('match-ticker').innerText = "⚽ Shot taken! Moving towards the net...";
+}
+function evaluateMatchScoreState() {
+const isGoal = (ball.position.x >= -4.5 && ball.position.x <= 4.5 && ball.position.y <= 4.5 && ball.position.y >= 0);
+if (isHomeTurn) {
+if (isGoal) {
+scoreHome++;
+document.getElementById('score-home').innerText = scoreHome;
+document.getElementById('match-ticker').innerText = 🎉 GOAL! ${activeStriker} scores for ${homeTeam}!;
+} else {
+document.getElementById('match-ticker').innerText = ❌ SAVED! ${teamDatabase[awayTeam].keeper} blocks the shot!;
+}
+isHomeTurn = false;
+} else {
+if (isGoal) {
+scoreAway++;
+document.getElementById('score-away').innerText = scoreAway;
+document.getElementById('match-ticker').innerText = 💥 GOAL! ${teamDatabase[awayTeam].strikers[0]} answers back for ${awayTeam}!;
+} else {
+document.getElementById('match-ticker').innerText = 🧤 GREAT BLOCK! ${teamDatabase[homeTeam].keeper} makes the save!;
+}
+isHomeTurn = true;
+}
+setTimeout(resetFieldAssetsForNextTurn, 3000);
+}
+function resetTurnHUDLabels() {
+if (isHomeTurn) {
+document.getElementById('hud-home-player').innerText = Striker: ${activeStriker};
+document.getElementById('hud-away-player').innerText = Keeper: ${teamDatabase[awayTeam].keeper};
+} else {
+document.getElementById('hud-home-player').innerText = Keeper: ${teamDatabase[homeTeam].keeper};
+document.getElementById('hud-away-player').innerText = Striker: ${teamDatabase[awayTeam].strikers[0]};
+}
+}
+function resetFieldAssetsForNextTurn() {
+ball.position.set(0, 0.32, 5);
+ballPhysics.velocity.set(0, 0, 0);
+ballPhysics.active = false;
+resetTurnHUDLabels();
+if (isHomeTurn) {
+document.getElementById('match-ticker').innerText = Your turn! ${activeStriker} is on the ball.;
+} else {
+document.getElementById('match-ticker').innerText = ${awayTeam} is stepping up to take their shot...;
+}
+document.getElementById('kick-btn').style.display = 'inline-block';
+}
+
